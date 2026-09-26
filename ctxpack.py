@@ -64,8 +64,8 @@ def make_matcher(root, extra):
     patterns += extra
 
     def skip(rel):
-        for pat in patterns:
-            p = pat.lstrip("/")
+        for pattern in patterns:
+            p = pattern.lstrip("/")
             if "/" in p:
                 if fnmatch.fnmatch(rel, p):
                     return True
