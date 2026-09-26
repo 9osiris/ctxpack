@@ -20,6 +20,13 @@ python ctxpack.py ~/projects/myapp -o myapp.md
 # only pack what you're working on (staged, unstaged, untracked vs git)
 python ctxpack.py --diff -o wip.md
 
+# copy the bundle straight to your clipboard, don't print it
+# (uses pbcopy, xclip, xsel, or clip, whichever is on your path)
+python ctxpack.py --copy
+
+# per-file token breakdown table instead of the bundle
+python ctxpack.py --tokens
+
 # just see what would get packed
 python ctxpack.py --list
 

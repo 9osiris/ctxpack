@@ -4,6 +4,7 @@
 import argparse
 import fnmatch
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -164,6 +165,42 @@ def render_tree(rels):
     return "\n".join(lines)
 
 
+def token_table(ok):
+    # per-file token estimates, biggest first, with a total row
+    rows = [(rel, len(text) // CHARS_PER_TOKEN) for rel, text in ok]
+    rows.sort(key=lambda r: r[1], reverse=True)
+    total = sum(t for _, t in rows)
+    width = max([6] + [len(str(t)) for _, t in rows] + [len(str(total))])
+    lines = [f"{t:>{width}}  {rel}" for rel, t in rows]
+    lines.append(f"{'-' * width}  total")
+    lines.append(f"{total:>{width}}  total ({len(rows)} files)")
+    return "\n".join(lines)
+
+
+def copy_to_clipboard(text):
+    # best effort clipboard via platform tools, clear error if none found
+    candidates = [
+        ["pbcopy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+        ["clip"],
+    ]
+    tried = []
+    for cmd in candidates:
+        tried.append(cmd[0])
+        if shutil.which(cmd[0]) is None:
+            continue
+        try:
+            r = subprocess.run(cmd, input=text.encode("utf-8"),
+                               capture_output=True)
+        except OSError:
+            continue
+        if r.returncode == 0:
+            return
+        sys.exit(f"ctxpack: {cmd[0]} failed (exit {r.returncode})")
+    sys.exit(f"ctxpack: no clipboard tool found (tried {', '.join(tried)})")
+
+
 def pack(root, files, fmt, max_bytes, with_tree):
     ok, skipped = filter_files(files, max_bytes)
     total_chars = sum(len(text) for _, text in ok)
@@ -213,6 +250,10 @@ def main():
     ap.add_argument("--max-bytes", type=int, default=MAX_FILE_BYTES)
     ap.add_argument("--list", action="store_true",
                     help="just list the files that would be packed")
+    ap.add_argument("--tokens", action="store_true",
+                    help="print a per-file token breakdown table, skip the bundle")
+    ap.add_argument("--copy", action="store_true",
+                    help="copy the bundle to the clipboard instead of printing it")
     ap.add_argument("--diff", action="store_true",
                     help="only pack files changed vs git (staged, unstaged, untracked)")
     args = ap.parse_args()
@@ -235,12 +276,20 @@ def main():
             print(f"   skipped  {rel} ({why})")
         return
 
+    if args.tokens:
+        ok, _ = filter_files(files, args.max_bytes)
+        print(token_table(ok))
+        return
+
     body = pack(root, files, args.format, args.max_bytes,
                 with_tree=not args.no_tree)
     if args.out:
         Path(args.out).write_text(body, encoding="utf-8")
         print(f"wrote {args.out}")
-    else:
+    if args.copy:
+        copy_to_clipboard(body)
+        print(f"copied to clipboard (~{len(body) // CHARS_PER_TOKEN} tokens)")
+    if not args.out and not args.copy:
         print(body)
 
 
