@@ -4,6 +4,7 @@
 import argparse
 import fnmatch
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -133,6 +134,22 @@ def filter_files(files, max_bytes):
     return ok, skipped
 
 
+def git_changed_files(root):
+    # files changed vs HEAD: staged + unstaged + untracked
+    if subprocess.run(["git", "-C", str(root), "rev-parse", "--git-dir"],
+                      capture_output=True).returncode != 0:
+        sys.exit(f"ctxpack: {root}: not a git repo, --diff needs one")
+    changed = set()
+    cmds = [
+        ["git", "-C", str(root), "diff", "--name-only", "HEAD"],
+        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"],
+    ]
+    for cmd in cmds:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        changed.update(l for l in r.stdout.splitlines() if l)
+    return changed
+
+
 def render_tree(rels):
     lines = []
     seen = set()
@@ -196,6 +213,8 @@ def main():
     ap.add_argument("--max-bytes", type=int, default=MAX_FILE_BYTES)
     ap.add_argument("--list", action="store_true",
                     help="just list the files that would be packed")
+    ap.add_argument("--diff", action="store_true",
+                    help="only pack files changed vs git (staged, unstaged, untracked)")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
@@ -204,6 +223,9 @@ def main():
 
     skip = (lambda rel: False) if args.no_ignore else make_matcher(root, [])
     files = collect(root, args.include, args.exclude, skip)
+    if args.diff:
+        changed = git_changed_files(root)
+        files = [f for f in files if f[0] in changed]
 
     if args.list:
         ok, skipped = filter_files(files, args.max_bytes)

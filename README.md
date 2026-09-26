@@ -17,6 +17,9 @@ python ctxpack.py -o context.md
 # pack some other repo
 python ctxpack.py ~/projects/myapp -o myapp.md
 
+# only pack what you're working on (staged, unstaged, untracked vs git)
+python ctxpack.py --diff -o wip.md
+
 # just see what would get packed
 python ctxpack.py --list
 
